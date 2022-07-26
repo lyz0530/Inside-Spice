@@ -1,0 +1,535 @@
+\chapter{理解电路仿真}
+\label{chap:2}
+\section{SPICE引擎}
+SPICE存在超过20年了，但是很多仿真用户至今对SPICE如何工作理解的还非常少。许多工程师对他们汽车引擎的参数知道的都要比SPICE引擎的参数多的多。你自己测试一下。你的引擎有多少个气缸？你的引擎能产生多少马力？每个气缸头上有多少个阀？在传动条上有多少个前向齿轮？你们中的很多人不用怎么犹豫就能回答这些问题，我们中也很少有人会在不知道这些汽车的基本参数的情况下买一辆车。
+
+但是你会如何回答关于你的电路仿真器的这类同样的问题？SPICE求解电路方程会用到多少种算法？SPICE给瞬态分析提供了多少种步长控制算法？SPICE会用哪种数值积分算法？SPICE能解的最小电压或者电流是多少？SPICE中的电阻的上限是多少？你会如何回答这些问题？
+
+在本章，这些和其他关于仿真器的问题会得到回答。在这里，SPICE内部的工作机理会被揭示。你会学到仿真器如何工作，它在系统矩阵中如何表示电路元件，和电路矩阵是如何被填充和求解的。这章将要在SPICE的引擎上去看仿真这台机器的引擎盖下面。
+
+\section{引擎盖之下}
+很多人学习汽车是通过简单地揭开引擎盖，看，指和问问题。不幸的是，软件不让它自己用这种找问题的方法。所以不用惊奇，电路仿真如何工作并不是众所周知的。
+
+尽管有些时候看起来是这样，但是关于SPICE没有什么神奇的地方。SPICE生成的解用纸和铅笔也可以产生。SPICE只是简单地把这些计算自动化了。
+
+\section{系统方程}
+SPICE通过写一系列描述电路中元件的节点方程来开始分析。图\ref{图2.1}展示了一个简单的阻性电路。这个电路的节点方程可以通过把流过三个电路节点，$V_1$，$V_2$，和$V_3$，的电流加起来得到。图\ref{图2.2}a和方程(\ref{eq:2.1})描述了流经$V_1$电路节点的电流。
+\begin{equation}
+    -3\ amps + \frac{V_1-V_2}{5\ ohms} = 0
+    \label{eq:2.1}
+\end{equation}
+
+图\ref{图2.2}b和方程(\ref{eq:2.2})描述了流经$V_2$电路节点的电流。
+\begin{equation}
+    \frac{V_2-V_1}{5\ ohms}+\frac{V_2}{10\ ohms}+\frac{V_2-V_3}{5\ ohms}=0
+    \label{eq:2.2}
+\end{equation}
+图\ref{图2.2}c和方程(\ref{eq:2.3})描述了流经$V_3$电路节点的电流。
+\begin{equation}
+    \frac{V_3-V_2}{5\ ohms}+\frac{V_3}{10\ ohms}=0
+    \label{eq:2.3}
+\end{equation}
+
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.1.png}
+    \caption{一个简单的线性电阻电路。}
+    \label{图2.1}
+\end{figure}
+
+通过简单的代数运算，方程(\ref{eq:2.1}-\ref{eq:2.3})可以写成方程(\ref{eq:2.4}-\ref{eq:2.6})的形式。
+\begin{equation}
+    .2*V_1-.2*V_2+0*V_3=3
+    \label{eq:2.4}
+\end{equation}
+\begin{equation}
+    -.2*V_1+.5*V_2-.2*V_3=0
+    \label{eq:2.5}
+\end{equation}
+\begin{equation}
+     0*V_1-.2*V_2+.3*V_3=0
+    \label{eq:2.6}
+\end{equation}
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.2.png}
+    \caption{(a),(b)和(c)把支路电流加起来确定节点方程。}
+    \label{图2.2}
+\end{figure}
+方程(\ref{eq:2.4}-\ref{eq:2.6})就是描述图\ref{图2.1}中电路的节点系统方程。这三个方程有三个未知的电压$V_1$，$V_2$，和$V_3$。高斯消去是求解联合方程组最知名的方法之一。如果我们重新把方程(\ref{eq:2.4}-\ref{eq:2.6})写成矩阵的格式。
+\begin{equation}
+\begin{bmatrix}
+.2&  -.2&0 \\ 
+ -.2&  .5&-.2 \\ 
+ 0&  -.2&.3
+\end{bmatrix}*\begin{bmatrix}
+V_1\\ 
+V_2\\ 
+V_3
+\end{bmatrix}=\begin{bmatrix}
+3\\ 
+0\\ 
+0
+\end{bmatrix}
+\label{eq:2.7}
+\end{equation}
+方程(\ref{eq:2.7})是系统方程的矩阵形式。对方程(\ref{eq:2.7})进行前向消去可以得到方程(\ref{eq:2.8})。（读者可以自己玩玩从方程(\ref{eq:2.7})推导出方程(\ref{eq:2.8})）
+\begin{equation}
+    \begin{bmatrix}
+.2&  -.2&0 \\ 
+ 0&  .3&-.2 \\ 
+ 0&  0&.25
+\end{bmatrix}*\begin{bmatrix}
+V_1\\ 
+V_2\\ 
+V_3
+\end{bmatrix}=\begin{bmatrix}
+3\\ 
+3\\ 
+3
+\end{bmatrix}
+\label{eq:2.8}
+\end{equation}
+电压$V_1$，$V_2$，和$V_3$的值可以通过对方程(\ref{eq:2.8})进行回代得到：
+\begin{equation}
+    V_3=3/.25=12\ volts
+    \label{eq:2.9}
+\end{equation}
+\begin{equation}
+    V_2=\frac{.2*V_3+3}{.3}=18\ volts
+    \label{eq:2.10}
+\end{equation}
+\begin{equation}
+    V_1=\frac{.2*V_2+3}{.2}=33\ volts
+    \label{eq:2.11}
+\end{equation}
+（作者提醒：作者花了大约12分钟来完成这个例子；SPICE仅用了0.09秒就得到了同样的结果。）
+
+\section{矩阵中的元件}
+对许多电路来说，SPICE用简单的节点分析技术就可以确定电路电压。但是当电路中含有非线性器件和电荷存储元件时解算法会变得非常复杂。非线性器件和电荷存储元件在代入系统方程前必须被简化。这些简化是必须的，因为系统方程值接受线性I-V关系。为了理解SPICE如何构建矩阵，必须找到每个电路元件的I-V特性。
+
+\subsection{矩阵}
+SPICE中的系统方程是用一些矩阵表示的。这些方程表征了电路中的每个元件上的电压和电流的线性关系。系统矩阵如图\ref{图2.3}。
+
+电压阵列是解数组，表示电路的节点电压。当执行一个仿真的时候，SPICE试着确定节点电压的值，这些值要满足Kirchoff电压和电流定律。在仿真输出中的解电压直接来自电压数组。
+
+电流阵列是电路中已知的量之一，表示产生自电流源和有源器件的独立支路电流。在仿真中，SPICE从电流源设置或者之前施加到有源器件端口的电压处确定支路电流。
+
+电导阵列是电路中另一个已知的值，表示电路中每一个元件的电压和电流之间的线性关系。电导阵列中的值由电路中的元件决定。非线性器件，比如二极管和晶体管，和电荷存储元件比如电容和电感，在电导阵列中是通过它们的线性等效电路表示的。电流和电导阵列中的项是用来确定下一次解电压。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.3.png}
+    \caption{SPICE中使用的系统矩阵。}
+    \label{图2.3}
+\end{figure}
+
+\subsection{电阻}
+电路电阻只出现在电导阵列中。电导阵列中的值表示电阻值的倒数。图\ref{图2.4}展示了一个电阻的I-V特性和电阻的等效电导值。因为电阻的值既不随施加的电压也不随时间进行变化，所以在仿真过程中表示电阻的电导值为常数。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.4.png}
+    \caption{一个电阻的I-V特性。}
+    \label{图2.4}
+\end{figure}
+
+\subsection{非线性元件}
+在系统方程中表示二极管、晶体管和其他非线性器件比简单的电阻要稍微复杂一些。复杂的原因是非线性器件是通过电流-电压关系定义的，而这个关系会随着器件的直流偏置变化。对于系统方程这是一个问题，因为矩阵表示线性的关系（$G*V=I$）。电导阵列表示电路中每个元件的线性I-V关系。
+
+解决这个问题的办法是把非线性的I-V关系分解成许多小的线性近似。图\ref{图2.5}a展示了一个简单的非线性函数。图\ref{图2.5}b展示了该函数用几个线性片段表示的结果。任何的非线性函数都可以用一系列线性（分段线性）的近似来表示。当线性片段的个数增加时，近似的精确度也会增加。SPCIE用这种同样的技术来仿真非线性电路元件。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.5.png}
+    \caption{(a)和(b) 一个非线性方程和对该方程的一个分段线性近似。}
+    \label{图2.5}
+\end{figure}
+
+在仿真过程中，SPICE把非线性元件转化成了简单的线性等效电路。线性等效电路是由器件的电压偏置决定的。在分析的每一步，SPICE用线性等效电路来表示器件，因为该器件在这个电压偏置下工作。
+
+图\ref{图2.6}a展示了一个二极管的I-V特征曲线。如果解(电压)离电压$V_B$很近，仿真器对二极管的I-V特征感兴趣的部分只是靠近$v_B$的I-V特征。在这种情况下，二极管的非线性特征会由一条直线近似，该直线就是二极管特征曲线在该点的切线。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.6.png}
+    \caption{(a)和(b) 二极管的I-V特性和在电压$V_B$处二极管曲线的线性近似。}
+    \label{图2.6}
+\end{figure}
+
+图\ref{图2.6}b展示了二极管的直线模型。该直线模型由二极管在电压偏置$V_B$处的I-V特征曲线的切线决定。该线性模型与$I_d$轴在$I_{eq}$处相交，斜率等于$G_d$，也就是动态二极管电导。这个直线模型也被称为线性二极管模型。构造线性模型的技术叫做线性化。当方程\ref{eq:2.12}表示原二极管非线性特征时，方程\ref{eq:2.13}表示线性二极管方程。
+\begin{equation}
+    I_d = I_s[exp(\frac{qV_d}{NKT})-1]
+    \label{eq:2.12}
+\end{equation}
+
+\begin{equation}
+    I_d = G_d * V_d + I_{eq}
+    \label{eq:2.13}
+\end{equation}
+
+图\ref{图2.7}表示了代表线性二极管方程(\ref{eq:2.13})的等效电路。图\ref{图2.7}中的电路是SPICE在系统方程中用来表示二极管的等效电路。这个等效电路也被称作线性二极管模型。在SPICE中，二极管通过一个电导（电阻）和一个并联的电流源建立模型。在仿真中，电导值$G_{d}$（$\frac{1}{G_d}$也被称为小信号电阻或者动态电阻）会被存在电导阵列中，而等效电流$I_{eq}$会被存在电流阵列中。反过来，这些值会被用来计算一系列新的解电压。在每一个解点，二极管电流和电导值会被重新计算，然后存到系统方程中。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.7.png}
+    \caption{一个二极管和它的线性等效电路。}
+    \label{图2.7}
+\end{figure}
+
+当讨论线性二极管模型时，线性模型和小信号二极管模型的区别应该明确。尽管线性模型和小信号模型相似，两个是不一样的。二极管的线性模型包含两个元件，二极管的动态电导($G_d$)和等效电流($I_{eq}$)。小信号二极管模型也包含两个元件，动态电阻($\frac{1}{g_d}$)和小信号电容($c_d$)。线性二极管模型会或者不会包含小信号电容($c_d$)(取决于是否执行瞬态分析)，而小信号二极管模型不包含等效电流（$I_{eq}$）。图\ref{图2.8}a展示了线性二极管模型，图\ref{图2.8}b展示了小信号二极管模型。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/图2.8.png}
+    \caption{(a)和(b)二极管的线性等效模型和二极管的小信号模型。}
+    \label{图2.8}
+\end{figure}
+
+晶体管通过拓展线性二极管模型来表示。对于双极型、JFET和MOSFET晶体管，其线性模型是通过用之前在二极管那里提到的同样的线性化技术建立的。但是对于晶体管来说，对每对器件端口都要进行线性化过程。对双极型晶体管，基极-发射极、集电极-发射极、和集电极-基极端口要进行线性化。对MOSFET，栅极-源极、漏极-源极、源极-漏极，和源极-体电极要进行线性化。一旦线性化模型确定，电导和等效电流值就会被存在系统方程中。
+
+\subsection{电荷存储元件}
+虽然通过画器件的I-V特性曲线可以非常容易地理解非线性器件，但理解电荷存储元件更困难，因为它的I-V特性曲线不能被画成一种简单的二维图。对于电容器或者电感器，I-V特性曲线随着施加的电压、电流和时间会一直变化。但是，像线性和非线性器件一样，电容器和电感器的值必须被存进系统方程中。
+
+在小信号扫频中，电容器和电感器表示为线性元件，但是在瞬态扫描时，电容器和电感器有着明确的，是时间的函数的非线性I-V特征曲线。可视化电容器的I-V特性曲线要求三维图，一个电压轴，一个电流轴，还有一个时间轴。
+
+图\ref{图2.9}展示了一个简单的电容器电路。在时间$T=0$时，开关闭合，电流流到电容器极板。过一段时间，电容器的电压会升到电池电势，流入电容器的电流减到0。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.2\textwidth]{figure/Chapter2/图2.9.png}
+    \caption{一个简单的时域电路。}
+    \label{图2.9}
+\end{figure}
+图\ref{图2.10}a展示了电容器电流和时间的关系。图\ref{图2.10}b展示了电容器电压和时间的关系。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.10.png}
+    \caption{(a)和(b) 图\ref{图2.9}中电路的电容器电流 vs. 时间和电容器电压 vs. 时间。}
+    \label{图2.10}
+\end{figure}
+
+为了可视化电容器的I-V特性曲线，想象一下把图\ref{图2.10}a和b放到一个共同的时间轴上。图\ref{图2.11}a展示了图\ref{图2.10}a和b在一个共同的轴上的超级位置。注意在图\ref{图2.11}a和b上的那根轴是用离散时间间隔标记的。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.11.png}
+    \caption{(a)和(b) 电容器电流和电压 vs和离散时间点的I-V特性曲线。}
+    \label{图2.11}
+\end{figure}
+电容器的I-V特性曲线可以通过在Y轴上的电容器电流和X轴上的电容器电压之间画一条线得到。那条得到的线代表电容器在那个时刻的I-V关系。如果你对每一个时间点都遵循上述步骤，你会见证I-V关系随着时间变化。这种效应在图\ref{图2.11}b中展示。图\ref{图2.12}展示了图\ref{图2.11}b沿着时间轴看的效果。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.12.png}
+    \caption{沿着时间轴看电容器的I-V特性曲线。}
+    \label{图2.12}
+\end{figure}
+
+在瞬态分析中，解在时间上是离散时刻的。在每一个解的时间点，数值积分函数决定电容器和电感器的线性I-V关系。这种线性关系用图形的方式表示在了图\ref{图2.13}，用数学的方式表示在了方程(\ref{eq:2.14})。
+\begin{equation}
+    I_c = G_c * V_c + I_{eq}
+    \label{eq:2.14}
+\end{equation}
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.13.png}
+    \caption{在时间$T$电容器电压和电流的线性模型。}
+    \label{图2.13}
+\end{figure}
+
+在SPICE中，电荷存储元件用简化的线性等效电路表示。（对于电容器，这个电路就是方程(\ref{eq:2.14})中表示的电流-电压关系。）这些等效电路也被称为伴随模型。图\ref{2.14}a和b表示了电容器和电感器的伴随模型。伴随模型的电导和电流源的值（对于电感器是电阻和电压源的值）在每一个新的瞬态时间点由数值积分算法重新计算。一旦确定，伴随模型的元件就可以存入系统矩阵。在瞬态分析的每一个新的解时间点，SPICE会为电路中的每一个电容器和电感器计算新的伴随模型。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.14.png}
+    \caption{(a)和(b)电容器和电感器的伴随模型。}
+    \label{图2.14}
+\end{figure}
+
+SPICE通过把每一个元件表示为一个简单的线性等效电路在仿真电器元件的行为。这被称为电路线性化。随着仿真进行，SPICE会为电路中的每一个非线性器件和电荷存储元件重新计算新的线性化等效电路。当电路电压和电流改变时，线性模型为了反映电路的非线性行为也会跟着改变。
+
+\subsection{通过校验进行矩阵构建}
+在本章的系统方程一节，你看到了一个简单的电路被转换成一系列的节点方程。节点方程随后被转化成一系列的系统方程，并被用矩阵的形式存储。SPICE基本上是用这样的步骤来构造系统方程和电路矩阵。不过，为了节省时间，SPICE构造系统矩阵时走了捷径。这条捷径允许SPICE构建矩阵因为每个元件都从输入文件中读取了。这条捷径叫做通过校验进行矩阵构建。只要连接元件的节点一旦定义，通过校验就可以立即构建矩阵并识别出每一个元件在矩阵中的位置\cite{Vlach1983}。
+
+通过校验用矩阵构建来构造系统矩阵需要借助预定义的元件模板。模板描述了一个特殊器件的电导和电流值在矩阵中的位置。图\ref{图2.15a}，\ref{图2.15b}和\ref{图2.15c}分别展示了电阻，恒流源，和二极管的模板。每一个可以在SPICE中仿真的元件都有一个元件模板。MOSFET的模板见图\ref{图2.16}。SPICE中的系统矩阵会随着从输入文件中读入的元件个数扩展。当SPICE从输入文件中读入元件时，元件模板描述了该器件在电导阵列和电流阵列中的位置。模型也要决定是否该扩展阵列来为新元件增加额外的节点。在SPICE从输入文件中读出最后一个元件后，所有电路元件都会在系统矩阵中被安排合适的位置。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.15a.png}
+    \caption{电阻模板。}
+    \label{图2.15a}
+\end{figure}
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.15b.png}
+    \caption{恒流源模板。}
+    \label{图2.15b}
+\end{figure}
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.15c.png}
+    \caption{二极管等效电路模板。}
+    \label{图2.15c}
+\end{figure}
+
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.16.png}
+    \caption{一个四端口MOSFET的模板。}
+    \label{图2.16}
+\end{figure}
+
+一旦元件的模板知道，通过校验法进行矩阵构造就可以应用到几乎任何电路了。作为一个简单的例子，检验一下图\ref{图2.1}。图\ref{图2.1}中电路的SPICE网表如图\ref{图2.17}。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.17.png}
+    \caption{图\ref{图2.1}的SPICE网表。}
+    \label{图2.17}
+\end{figure}
+
+当SPICE读入电流源$I_1$时，电流源模板会给节点连接分配矩阵中的行和列，这些行和列对应着电流源的节点（节点1和节点2）。如同模板描述的那样，SPICE创建一个初始的$2\times2$系统矩阵，如图\ref{图2.18ab}(a)。SPICE继续读入电阻器$R_1$。使用电阻器模板，矩阵会被增加一个额外的节点，如图\ref{图2.18ab}(b)，同时电阻器的电导值会被安排进电导阵列。5-ohm电阻器的电导值是.2mhos，电阻器的值就像模板里描述的那样会被放置在电导阵列中。电阻器$R_2$被加入图\ref{图2.18cd}(c)中。注意重叠的模型项是如何被加入到已经存在的项中的。电阻器$R_3$被加入到图\ref{图2.18cd}(d)中，电阻器$R_4$被加入到图\ref{图2.18ef}(e)中。图\ref{图2.18ef}是一个$4\times4$的矩阵，对应着电路中的四个节点（节点1，2，3和地）。但是因为地节点被定义成了参考节点，它的值等于0，所以矩阵中关于地节点的行和列会被消去。图\ref{图2.18ef}(f)展示了消去地节点的行和列之后的最终的矩阵。注意图\ref{图2.18ef}和方程(\ref{eq:2.4}-\ref{eq:2.6})完全匹配，而且所有这些的实现连一个单节点的方程都不用写出。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.18ab.png}
+    \caption{(a)和(b) 通过校验进行矩阵构建的一个例子。}
+    \label{图2.18ab}
+\end{figure}
+
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.18cd.png}
+    \caption{(c)和(d) 通过校验进行矩阵构建的一个例子。}
+    \label{图2.18cd}
+\end{figure}
+
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.18ef.png}
+    \caption{(e)和(f) 通过校验进行矩阵构建的一个例子。}
+    \label{图2.18ef}
+\end{figure}
+
+SPICE用通过校验进行矩阵构建的方法初始化系统方程矩阵。通过校验进行矩阵构建是一种快速有效的构造系统方程的方式。SPICE用通过校验进行矩阵构建的方法可以在边从输入文件读入电路元件的同时来构造矩阵。当文件的最后一个元件被读入后，系统矩阵也就完全被定义好了。
+
+\section{矩阵求解}
+一旦电导阵列和电流阵列被填充好，SPICE就必须求出电压阵列中的的节点电压值。SPICE有两种解算法，一种是针对线性电路的，另一个种是针对非线性电路的。在本书中，线性电路被定义成一种只含有线性元件、电压源和电流源的电路。线性元件被定义成只有线性电压-电流关系的无源元件\cite{Hayt1978}。对于DC和瞬态分析，线性元件有电阻器和线性受控的电压和电流源。对于AC小信号分析，线性器件包括电阻器、电容器、电感器和线性受控的电压和电流源。
+
+\subsection{线性分析}
+如果电路只包含线性元件，SPICE用计算机等效的高斯消去法来解矩阵。SPICE用的算法是LU分解。出于理解的目的，LU分解是一种有效的利用高斯消去法来求解线性方程组的计算机方法\cite{Vlach1983}。一个高斯消去法的例子在本章早些时候的方程(\ref{eq:2.7}-\ref{eq:2.11})被用过。
+
+\subsection{非线性分析}
+当只有线性元件存在时，SPICE用高斯消去来解电路方程。但是，如果有一个或者多个非线性器件加入，SPICE就必须用一种不同的求解器算法。第二种求解器是一种叫做Newton-Raphson算法的非线性解技术。
+
+\subsubsection{迭代到解}
+如果电路只包含线性元件，那么电路方程在自然上是代数的。方程\ref{eq:2.15}是一个简单的代数方程例子。
+\begin{equation}
+    7x + x = 32
+    \label{eq:2.15}
+\end{equation}
+
+方程\ref{eq:2.15}可以用简单的代数操作求解，如方程\ref{eq:2.16}和\ref{eq:2.17}。
+
+\begin{equation}
+    8x = 32
+    \label{eq:2.16}
+\end{equation}
+
+\begin{equation}
+    x = 4
+    \label{eq:2.17}
+\end{equation}
+
+但是如果电路中有一个或者多个非线性元件加入的话，电路方程在自然上就会变成超越函数的。方程(\ref{eq:2.18})是一个简单的超越方程例子。
+\begin{equation}
+    ln(x)+x = 32
+    \label{eq:2.18}
+\end{equation}
+
+方程(\ref{eq:2.18})不能通过简单的代数运算求解。相反，超越方程经常是用迭代猜测的技术求解的。从把方程(\ref{eq:2.18})重排为方程(\ref{eq:2.19})开始。
+\begin{equation}
+    f(x) = ln(x)+x-32
+    \label{eq:2.19}
+\end{equation}
+
+构造一个表如图\ref{图2.19}a。方程(\ref{eq:2.19})可以通过对$X$的值做出一系列迭代猜测，直到$f(x)$的结果等于或者非常接近0。作者的一连串猜测如图\ref{图2.19}b。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.6\textwidth]{figure/Chapter2/图2.19.png}
+    \caption{(a)和(b) 迭代到一个超越方程的解。}
+    \label{图2.19}
+\end{figure}
+
+当一个或者多个非线性器件加入到电路中，系统方程变成了超越方程，不能用简单的高斯消去来解。这种时候，一种叫做Newton-Raphson算法的非线性解技术被应用到系统矩阵。Newton-Raphson算法，一种连续近似的方法，是一种迭代解非线性方程组的技术。该算法用一个初始猜测开始迭代过程，通过一系列的连续猜测找到解。
+
+方程(\ref{eq:2.20})是Newton-Raphson公式。
+\begin{equation}
+    X_{n+1}=X_n - \frac{F(X_n)}{F^{'}(X_n)}
+    \label{eq:2.20}
+\end{equation}
+
+Newton-Raphson公式的一个简单例子在这里可能会有帮助。为了把Newton-Raphson算法解算法应用到方程(\ref{eq:2.18})上，用方程(\ref{eq:2.19})的形式重写方程(\ref{eq:2.18})。这个就是函数$F(x)$。这个方程的解就是使函数$F(x)$等于0的$X$的值。为了用Newton-Raphson算法，必须得到方程(\ref{eq:2.19})的导数。方程(\ref{eq:2.21})代表导数$F^{'}(x)$。
+\begin{equation}
+    f^{'}(x) = \frac{1}{x}+1
+    \label{eq:2.21}
+\end{equation}
+
+得到的Newton-Raphson公式如方程\ref{eq:2.22}所示。
+\begin{equation}
+    X_{n+1}=X_{n}-\frac{ln(X_n)+X_n-32}{\frac{1}{X_n}+1}
+    \label{eq:2.22}
+\end{equation}
+
+用一个初始猜测$X_n=1$开始进行迭代过程会得到如图\ref{图2.20}的表中的值（这里的$f(x)$指$X_{n+1}$）。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.3\textwidth]{figure/Chapter2/图2.20.png}
+    \caption{在一个超越方程上进行Newton-Raphson迭代。}
+    \label{图2.20}
+\end{figure}
+注意第四次迭代后，$X_n$和$X_{n+1}$的值保持恒定。Newton-Raphson迭代过程从一个初始猜测开始，当连续猜测的差变成0时停止迭代。当Newton-Raphson算法找到精确解，额外迭代预测的值会保持不变。在图\ref{图2.20}中，第四次和第五次迭代是一样的，并且与早些图\ref{图2.19}b中的解匹配。
+
+\subsubsection{迭代终止}
+当一个或者多个非线性器件加入电路时，SPICE用Newton-Raphson算法来解电路方程。SPICE从给电路中的每一个节点电压一个初始猜测开始迭代。在每次连续迭代中，一系列新的节点电压被预测出来。解函数会监视着本次迭代的节点电压和前一次迭代的值。理想情况下，在精确解上，两次连续迭代的节点电压应该完全一样，或者迭代电压值之间的差应该为0。但是，由于数字计算机表示数值的方式，说两个数完全相同是困难的（因为舍入误差）。正因为这个困难，SPICE用一个预定的误差容限来监视迭代节点电压值之间的差别。当迭代节点电压值之间的差别对于电路中的每个节点都小于误差容限时，SPICE就终止迭代求解的过程。
+
+\subsubsection{SPICE中的不收敛}
+除了误差容限限制，SPICE会限制每种分析类型被容许的迭代次数总和。如果迭代节点电压在SPICE超出迭代限制之前还没有满足误差容限，SPICE会终止方程，并输出臭名昭著的不收敛错误信息。
+
+每一种分析类型都有一个不同的迭代次数限制。用户可以用.OPTIONS声明重置每一种分析的迭代限制。第\ref{chap:non-conver}章会解释如何设置每一个迭代限制参数。
+
+\subsubsection{Newton-Raphson例子}
+Newton-Raphson算法是容许SPICE快速确定电路中节点电压值的一种迭代过程。为了展示SPICE如何把Newton-Raphson算法应用到电路中，请看图\ref{图2.21}中的电路。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.3\textwidth]{figure/Chapter2/图2.21.png}
+    \caption{一个简单的非线性电路。}
+    \label{图2.21}
+\end{figure}
+
+电路中二极管用方程(\ref{eq:2.23})中所示的I-V方程表征。
+\begin{equation}
+    I_d = 1pA * [exp(40 * V_d)-1]
+    \label{eq:2.23}
+\end{equation}
+
+根据这个方程，这个单节点电路的节点方程可以通过把节点$V_1$处的流出电流加起来写出。节点方程如方程(\ref{eq:2.24})所示。
+\begin{equation}
+    F(V_d) = 0 = -5 + \frac{V_d}{2} + 1pA * [exp(40 * V_d)-1]
+    \label{eq:2.24}
+\end{equation}
+
+方程(\ref{eq:2.24})形成了我们的电路函数$F(V_d)$。为了把Newton-Raphson公式用到这个电路中，方程(\ref{eq:2.24})的导数必须找到。方程(\ref{eq:2.24})的导数如方程(\ref{eq:2.25})所示。
+\begin{equation}
+    \frac{dF(V_d)}{dV_d} = 0 + \frac{1}{2} + 40pA * exp(40 * V_d)
+    \label{eq:2.25}
+\end{equation}
+
+这个电路的迭代方程如方程(\ref{eq:2.26})和(\ref{eq:2.27})所示。
+\begin{equation}
+    X_{n+1} = X_n - \frac{F(X_n)}{F^{'}(X_n)}
+    \label{eq:2.26}
+\end{equation}
+\begin{equation}
+    V_{d+1} = V_d - \frac{-5+.5*V_d+1pA*[exp(40*V_d)-1]}{.5+40pA*exp(40*V_d)}
+    \label{eq:2.27}
+\end{equation}
+
+从初始猜测值为电压等于1 volt开始，需要14次迭代来达到.7291 volts。迭代的电压值如表\ref{表2.1}所示。注意表\ref{表2.1}中的第14次迭代；$V_d$和$V_{d+1}$都是.7291。当电压-到-电压迭代在四位有效数字内相同时，迭代过程被终止了。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/表2.1.png}
+    \caption{二极管电路的迭代电压值。}
+    \label{表2.1}
+\end{figure}
+
+在这个例子中，初始电压被选择成了1 volt。如果换一个不同的起始电压，虽然迭代过程也会迭代到.7291 volts，但取决于初始电压，迭代过程会需要更多或者更少的迭代。
+
+表\ref{表2.2}展示了对于很多不同的起始电压，迭代到.7291 volts需要的迭代步数。注意迭代步数随着初始猜测的变化会有很大的改变。如果猜测的初值靠近精确解，那么Newton-Raphson算法可以很快收敛到一个解。前面的这个声明是重要的，因为如果SPICE在容许的迭代次数内不能实现收敛，那么仿真就会伴随着一个收敛失败而终止。
+\begin{figure}[htbp]
+\small
+    \centering
+    \includegraphics[width=0.4\textwidth]{figure/Chapter2/表2.2.png}
+    \caption{需要的迭代次数 vs. 起始电压。}
+    \label{表2.2}
+\end{figure}
+
+在本书的硬盘中，ch\_2子目录包含了一叫角DIODE.EXE的文件。这个简单的程序包含了图\ref{图2.19}中的二极管电路和Newton-Raphson算法。程序会提示用户初始电压，随后打印出得到的迭代电压值。这个程序被用来产生表\ref{表2.2}中的项。用DIODE.EXE程序和不同的初始电压值做实验。验证表\ref{表2.1}中的项。
+
+\subsubsection{例子总结}
+SPICE把Newton-Raphson算法作为非线性解引擎。迭代过程会伴随着给电路中每个节点电压一个初始猜测开始。迭代过程会一直持续，除非两次迭代的解相同或近似相同，或者迭代次数超过容许的限制。如果后者发生，SPICE会打印出一个不收敛的警告信息并终止仿真。
+
+因为在寻找解的过程中对迭代次数有一个限制，所以选择一个靠近精确解的初值对克服不收敛问题非常重要。关于设置节点电压的初值在第\ref{chap:non-conver}章会详细讨论。
+
+\section{SPICE工作概览}
+SPICE通过从输入文件读入元件开始分析。通过校验和一套预定义的模板参数构建矩阵，系统方程可以用一套线性矩阵来描述。一旦系统矩阵被定义好，SPICE就会按照输入文件中的命令来执行相应的分析。
+
+\subsection{直流工作点分析}
+每一种分析都需要先进行DC工作点的计算。DC工作点的计算建立电路的DC偏置。另外，工作点电压也被用作所有其他扫描分析的初始条件。
+
+在DC工作点分析中，只有DC电流和电压会被计算。电路的电容器被建模为理想开路电路，电路的电感器被建模为理想短路电路。
+
+为了计算DC工作点，代表电压和电流源的矩阵项被设置为它们合适的电源值。当这个完成后，SPICE为电路中的其他所有节点的节点电压做一个初始猜测，并把猜测值存储在电压阵列中。
+
+当电压阵列被填充好初值后，SPCIE调用一个叫作LOAD的函数。LOAD函数用初始节点电压猜测来计算电路中的每一个非线性元件的等效电流和电导（线性电路模型）。（LOAD函数在瞬态分析中也会计算电荷存储元件的伴随模型。）如同元件模板描述的那样，LOAD函数在电流阵列中存储等效电流，在电导阵列中存储等效电导。
+
+当所有器件被存进电流和电导阵列后，SPICE把这些阵列传递给Newton-Raphson求解器。Newton-Raphson求解器用方程\ref{eq:2.18}中的矩阵格式来计算新的一套节点电压。这一套新的节点电压是迭代电压值的第一批值，这些值会取代之前在电压阵列中的值。一旦新的节点电压被存进，SPICE会再一次调用LOAD函数根据新节点电压值计算新的线性电路模型。得到的电导和电流值会被存进电流和电导阵列，迭代求解的过程也会继续。
+
+执行Newton-Raphson迭代，基于之前的迭代电压值调用LOAD函数计算新的电流电导值，之后再执行另一次Newton-Raphson迭代...这种循环会一遍一遍地进行。迭代循环会一直进行下去，直到所有的节点电压和支路电流与上一次迭代值匹配或者Newton-Raphson迭代的次数超过容许的迭代次数。
+
+为了计算DC偏置点，SPICE会为电路中的节点电压用一个初始猜测值。这个初始猜测值被用作Newton-Raphson迭代的起始点。正常情况下，DC偏置点的求解需要10-500次左右的迭代。如果解被找到，SPICE会在输出文件中打印偏置电压。如果在被容许的迭代次数内没有找到解，SPICE会在输出文件中打印一个不收敛失效的信息并终止仿真。
+
+\subsection{直流扫描分析}
+直流扫描分析是简单的一系列DC工作点的计算。在DC扫描分析中，电压源或者电流源会在一定的值范围内步进。在前进的每一步，SPICE会执行同样 的前面描述过的DC偏置点的计算。但是在扫描分析中，对于该偏置点，每步会被要求通过2-50次迭代得到解！
+
+因为扫描分析要求几百或者几千个解，相比较DC工作点计算，仿真通常需要非常多的时间来完成。但是SPICE的作者们意识到了一些事情可以帮助加速仿真分析。因为扫描包含很多间隔均匀的步长，在任意两步之间节点电压的变化通常很小。知道这些后，SPICE的作者们决定用前一个节点电压的解作为Newton-Raphson下一次解迭代的初值。这项技术工作的很好，显著降低了DC扫描中每步求解需要的迭代次数。
+
+随着扫描继续进行，在每一个新解处SPICE会把.PRINT声明中的电压和电流存进内存。当分析完成，SPICE的输出函数会用表或者图的格式打印出分析结果。
+
+\subsection{交流扫频分析}
+像DC扫描分析一样，AC扫频分析也是从计算电路的DC偏置开始。一旦偏置被建立好，非线性大信号晶体管和二极管模型会被它们的线性小信号模型取代。小信号模型是由电路的DC偏置点决定的。
+
+小信号模型能取代大信号模型是因为在SPICE中AC扫频被定义为一种小信号线性分析。这就意味着在AC扫频中，扭曲、削波、饱和和其他非线性效应在偏置点被建立后都被忽略了。对于那些在AC扫频中不关心小信号模型的SPICE用户，输出结果有时候令人吃惊。（比如，如果你在一个开环增益为1e6，供电电压为+15VDC到-15VDC，输入电压幅度为1VAC的运放上进行AC扫频，SPICE会预测出输出电压的幅度为1,000,000volts。为了看到运放在电源供电电压处的削波现象，DC扫描分析或者瞬态扫描分析会被要求进行。）
+
+小信号分析也会提示复数的使用，像电压相位和幅度。让SPICE仿真复数项，电压、电流和电导阵列必须同时包含一个实数和一个虚数部分。在AC分析中，系统矩阵会成为复数项。
+
+除了存储DC模型，电路电容器和电感器的阻抗要被加入到复数电导阵列。
+
+一旦电路元件的复数电流、电压、和阻抗被存进解阵列，在分析中SPICE会在每一个频率点求解系统方程。在每一个频率点，受频率控制的阻抗会被计算和存进电导阵列。解算法随后会确定满足电路方程的复数电压和电流。
+
+线性模型的使用简化了寻找电路方程解的任务。（记住，当非线性元件存在时，SPICE只需要使用非线性求解器。）在AC扫频中，偏置点被找到后，SPICE会用计算机等效的高斯消去（LU分解）在每一个频率点处求解线性系统方程。因为阵列中只包含线性元件，SPICE在一次高斯分解中就能求解出小信号电压（SPICE不在AC小信号解上迭代），也是因为此，AC分析往往比任何其他的扫描分析都要快的多。
+
+\subsection{瞬态扫描分析}
+在所有的分析类型中，瞬态分析是最复杂的。在很多方面，瞬态仿真和DC扫描分析是相似的但是给分析加了几个复杂的因素。
+
+瞬态分析从DC偏置点的计算开始。在计算中，电路电容器被建模为开路，电路电感器被建模为短路。电路的偏置点描述了在瞬态分析过程中电路在时间$T=0$时的电路状态。
+
+但是从偏置被找到的那一刻开始，分析就改变了。在DC偏置点之后的每一个分析点，依赖于时间的电容器和电感器阻抗必须被加入到系统方程中。为了做这个，SPICE用一个数值积分函数把电路电感器和电容器转化为简化的等效电路。电容器或电感器的等效电路代表着器件的瞬态I-V关系，并且在分析中每个时间点的等效电路模型都会变化。在每一个新时间点，电容器和电感器等效电路的值会存储在电流和电导阵列中。
+
+DC偏置被找到后，SPICE切换到瞬态解模式。除了附加了电容器和电感器的等效电路外，瞬态求解器其他方面很像DC扫描求解器。在分析的每一个时间点，SPICE都会经历一系列Newton-Raphson迭代。如同在DC扫描分析中一样，瞬态迭代搜索的起始点来自上一次解的节点电压。随着瞬态分析继续，SPICE用前一次解电压作为下面一系列迭代的初值。迭代过程会一直持续下去直到当前时刻的解电压被找到，或者迭代的次数超过被容许的限制。当每一时刻的解电压都被找到，在.PRINT声明中出现的电压和电流会被存进内存中。瞬态分析完成后，SPICE会把存储的结果用表或者图的形式打印出来。
+
+\section{总结}
+表面上看，电路仿真是一个复杂的数值分析过程。但是如果你把每一步都拆分成简单的模块，过程会变得非常容易理解。任何SPICE计算的仿真结果也可以用简单的手工计算预测（尽管完成相同数目的运算手工可能得以年来计算但SPICE却可以以秒来做单位）。在SPICE上没有什么神秘的事情。
+
+本书主要关注的是给SPICE用户展示每个算法如何工作，为什么有时候它们不工作，哪种电路能让仿真器带来高精度的结果，和哪种电路会让仿真器输出错误的结果。或许这些当中最重要的，在本书中SPICE被看作一个工具，一个有一些特殊能力和特别局限的工具。
+
+像每一个工具一样，SPICE有局限，不能总是产生理想的结果。（用锤子作螺丝刀也很少会有理想的结果。）不管工具是一个自动化引擎或者一个锤子钻或者一个电路仿真器，要想把一个工具用的恰当，这个工具的能力和局限必须要弄清楚。从用户的角度来看，软件工具的局限性经常难以定义，因为看软件的内部几乎是不可能的，而且在很多方面这样做会违法。
+
+本书检查了SPICE和仿真器内部的工作。理解SPICE如何工作，理解仿真器的能力和局限，和理解为什么和在什么地方仿真器会引入不精确对于有效和有成效地使用SPICE是关键的。
+
+\bibliographystyle{plain}
+\bibliography{Reference/chapter2-reference}

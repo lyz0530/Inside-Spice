@@ -1,0 +1,67 @@
+\documentclass[cn,11pt,chinese]{elegantbook}
+ \usepackage[sectionbib]{chapterbib} %按章节添加参考文献
+
+\title{Inside SPICE}
+\subtitle{Overcoming the Obstacles of Circuit Simulation}
+
+\author{Ron M. Kielkowski}
+\bioinfo{译者}{李春桥}
+\date{2021年7月1日}
+\version{0.01}
+
+
+\extrainfo{Victory won\rq t come to us unless we go to it. --- M. Moore}
+
+\logo{figure/back.jpg}
+\cover{figure/front.jpg}
+
+% 本文档命令
+\usepackage{array}
+\newcommand{\ccr}[1]{\makecell{{\color{#1}\rule{1cm}{1cm}}}}
+% 修改目录深度
+\setcounter{tocdepth}{2}
+
+\begin{document}
+
+\maketitle
+\frontmatter
+
+\chapter*{特别声明}
+\markboth{Special Statement}{特别声明}
+
+送给我的未婚妻周彤彤小姐。
+
+初稿：2022年1月30日
+
+\vskip 1.5cm
+
+\begin{flushright}
+李春桥\\
+2021.12.12
+\end{flushright}
+
+\tableofcontents
+%\listofchanges
+
+\mainmatter
+\include{content/Preface}
+\include{content/Chapter1}
+\include{content/Chapter2}
+\include{content/Chapter3}
+\include{content/Chapter4}
+\include{content/Chapter5}
+\include{content/Chapter6}
+
+
+\include{content/Acknowledgments}
+
+\nocite{*} 
+
+\appendix
+\include{content/Appendix-A}
+\include{content/Index}
+\include{content/About_the_author}
+\include{content/About_the_disk}
+
+
+\end{document}
